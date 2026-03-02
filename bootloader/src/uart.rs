@@ -1,11 +1,14 @@
-const RCC_AHB1ENR: *mut u32 = 0x4002_3830 as *mut u32;
-const RCC_APB1ENR: *mut u32 = 0x4002_3840 as *mut u32;
-const GPIOA_MODER: *mut u32 = 0x4002_0000 as *mut u32;
-const GPIOA_AFRL:  *mut u32 = 0x4002_0020 as *mut u32;
-const USART2_SR:  *const u32 = 0x4000_4400 as *const u32;
-const USART2_DR:  *mut u32   = 0x4000_4404 as *mut u32;
-const USART2_BRR: *mut u32   = 0x4000_4408 as *mut u32;
-const USART2_CR1: *mut u32   = 0x4000_440C as *mut u32;
+// Adresses des registres — Source : RM0383 STM32F411 Reference Manual
+// RCC (Reset and Clock Control) — contrôle les horloges des périphériques
+const RCC_AHB1ENR: *mut u32 = 0x4002_3830 as *mut u32; // AHB1 peripheral clock enable (GPIOA = bit 0)
+const RCC_APB1ENR: *mut u32 = 0x4002_3840 as *mut u32; // APB1 peripheral clock enable (USART2 = bit 17)
+const GPIOA_MODER: *mut u32  = 0x4002_0000 as *mut u32;  // Mode register : 2 bits/pin (00=input, 01=output, 10=AF, 11=analog)
+const GPIOA_AFRL:  *mut u32  = 0x4002_0020 as *mut u32;  // Alternate function low : 4 bits/pin pour PA0-PA7
+// USART2 — PA2=TX (AF7), PA3=RX (AF7), 115200 baud @ HSI 16 MHz
+const USART2_SR:  *const u32 = 0x4000_4400 as *const u32; // Status register (RXNE=bit5, TXE=bit7)
+const USART2_DR:  *mut u32   = 0x4000_4404 as *mut u32;   // Data register : écriture=TX, lecture=RX
+const USART2_BRR: *mut u32   = 0x4000_4408 as *mut u32;   // Baud rate register : valeur = Fclk / baudrate
+const USART2_CR1: *mut u32   = 0x4000_440C as *mut u32;   // Control register 1 (UE=bit13, TE=bit3, RE=bit2)
 
 /// Initialise USART2 à 115200 baud (HSI 16 MHz)
 pub fn uart_init() {
@@ -26,10 +29,11 @@ pub fn uart_init() {
     let afrl = (afrl & !(0xFFFF << 8)) | (0x7777 << 8);
     core::ptr::write_volatile(GPIOA_AFRL, afrl);
 
-    // 4. BRR : 16 MHz / 115200
+    // 4. BRR = Fclk / baudrate = 16_000_000 / 115_200 ≈ 138
+    //    Pas de fraction nécessaire avec l'oversampling x16 par défaut
     core::ptr::write_volatile(USART2_BRR, 16_000_000 / 115_200);
 
-    // 5. Activer USART2 : UE + TE +RE (bits 13, 3, 2)
+    // 5. CR1 : UE (bit 13) = UART enable, TE (bit 3) = TX enable, RE (bit 2) = RX enable
     core::ptr::write_volatile(USART2_CR1, (1 << 13) | (1 << 3) | (1 << 2));
     }
 }

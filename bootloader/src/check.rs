@@ -2,8 +2,17 @@ use crate::crc::crc32;
 use crate::types::{AppHeader, BootError, APP_BASE, APP_MAGIC};
 use core::mem::size_of;
 
+/// Vérifie l'intégrité de l'image applicative en flash.
+///
+/// Séquence :
+/// 1. Cast de l'adresse APP_BASE en référence AppHeader (unsafe, adresse fixe connue)
+/// 2. Vérification du magic 0xDEADBEEF
+/// 3. Vérification que la taille déclarée est raisonnable (< 480 Ko)
+/// 4. Calcul du CRC32 sur les octets de l'image (hors header)
+/// 5. Comparaison avec le CRC32 stocké dans le header
 pub fn check_image() -> Result<&'static AppHeader, BootError> {
-    // 1. Lire le header depuis APP_BASE
+    // SAFETY: APP_BASE est l'adresse de début de la zone flash app, toujours mapped.
+    // La référence 'static est valide car la flash ne bouge pas.
     let header = unsafe { &*(APP_BASE as *const AppHeader)};
 
     // 2. Vérifier le magic
@@ -16,7 +25,8 @@ pub fn check_image() -> Result<&'static AppHeader, BootError> {
         return Err(BootError::ImageTooLarge);
     }
 
-    // 4. Calculer le CRC32 sur les octets après le header
+    // 4. Construire un slice sur les octets de l'image, juste après le header.
+    // SAFETY: la taille a été validée à l'étape 3, l'adresse est dans la flash mappée.
     let data = unsafe {
         core::slice::from_raw_parts(
             (APP_BASE as usize + size_of::<AppHeader>()) as *const u8,
