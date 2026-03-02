@@ -1,4 +1,4 @@
-use crate ::types::BootError;
+use crate::types::{BootError, APP_BASE};
 
 const FLASH_KEYR: *mut u32 = 0x4002_3C04 as *mut u32;
 const FLASH_SR: *mut u32 = 0x4002_3C0C as *mut u32;
@@ -47,14 +47,16 @@ fn addr_to_sector(addr: u32) -> Result<u8, BootError> {
     }
 }
 
-/// Ecrit un slice d'octets en flash à partir de `addr`
-/// `addr` doit être dans FLASH_APP
+/// Efface le secteur correspondant à l'adresse de base de l'app
+pub fn flash_erase_app() -> Result<(), BootError> {
+    let sector = addr_to_sector(APP_BASE)?;
+    unsafe { flash_erase_sector(sector) }
+}
+
+/// Ecrit un slice d'octets en flash à partir de `addr` (secteur déjà effacé)
 pub fn flash_write(addr: u32, data: &[u8]) -> Result<(), BootError> {
-    // Le secteur 2 commence à 0x08008000 — c'est toujours le premier secteur app
-    let sector = addr_to_sector(addr)?;
     unsafe {
         flash_unlock();
-        flash_erase_sector(sector)?;
         for (i, &byte) in data.iter().enumerate() {
             flash_wait_ready();
             let cr = core::ptr::read_volatile(FLASH_CR);
