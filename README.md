@@ -65,6 +65,71 @@ Reset
 
 ---
 
+## Diagramme d'architecture
+
+```mermaid
+flowchart TD
+    subgraph FLASH["Flash STM32F411"]
+        direction TB
+        BL["0x08000000\nBootloader\n32 Ko\nSecteurs 0-1"]
+        APP["0x08008000\nApplication\n480 Ko\nSecteurs 2-7"]
+    end
+
+    subgraph BOOT["bootloader/src/"]
+        MAIN["main.rs\nChef d'orchestre"]
+        TYPES["types.rs\nAppHeader · BootError\nAPP_MAGIC · APP_BASE"]
+        CRC["crc.rs\ncrc32()\ntable IEEE 802.3"]
+        CHECK["check.rs\ncheck_image()\nmagic + size + CRC32"]
+        BOOT_MOD["boot.rs\njump_to_app()\nVTOR + MSP + bx"]
+        UART["uart.rs\nuart_init()\nuart_putc() · uart_getc()"]
+        FLASH_MOD["flash.rs\nflash_erase_app()\nflash_write()"]
+        RECOVERY["recovery.rs\nrecovery_mode()\nUART → flash chunks"]
+    end
+
+    subgraph APPTEST["app-test/src/"]
+        BLINK["main.rs\nblink LED PA5\nLD2 Nucleo"]
+    end
+
+    subgraph PC["PC — flash_tool.py"]
+        SCRIPT["flash_tool.py\npyserial\nsize big-endian + image"]
+    end
+
+    HW_RESET(["Reset Cortex-M4\nlecture 0x08000000\n→ MSP + Reset_Handler"])
+
+    HW_RESET --> MAIN
+    MAIN --> UART
+    MAIN --> CHECK
+    CHECK --> TYPES
+    CHECK --> CRC
+
+    CHECK -->|"Ok"| BOOT_MOD
+    CHECK -->|"Err"| RECOVERY
+
+    BOOT_MOD -->|"VTOR=0x08008000\nMSP=APP[0]\nbx APP[1]"| BLINK
+
+    RECOVERY --> UART
+    RECOVERY --> FLASH_MOD
+    FLASH_MOD -->|"unlock\nerase\nwrite\nlock"| APP
+
+    SCRIPT -->|"4B size + N bytes\n115200 baud"| UART
+    UART -->|"'K' ou 'E'"| SCRIPT
+
+    BL -.->|"exécuté par"| BOOT
+    APP -.->|"exécuté après jump"| APPTEST
+
+    subgraph REGISTERS["Registres clés"]
+        R1["VTOR 0xE000ED08\ntable vecteurs active"]
+        R2["FLASH_CR 0x40023C10\nPG · SER · SNB · LOCK"]
+        R3["USART2_DR 0x40004404\nTX / RX data"]
+    end
+
+    BOOT_MOD -.-> R1
+    FLASH_MOD -.-> R2
+    UART -.-> R3
+```
+
+---
+
 ## Structure de l'en-tête applicatif
 
 ```
